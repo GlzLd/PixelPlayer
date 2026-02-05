@@ -419,6 +419,7 @@ fun FullPlayerContent(
         PlayerProgressBarSection(
             currentPositionProvider = currentPositionProvider,
             totalDurationValue = totalDurationValue,
+            songDurationHintMs = song.duration,
             onSeek = onSeek,
             expansionFractionProvider = expansionFractionProvider,
             isPlayingProvider = isPlayingProvider,
@@ -1032,6 +1033,7 @@ fun formatAudioMetaString(mimeType: String?, bitrate: Int?, sampleRate: Int?): S
 private fun PlayerProgressBarSection(
     currentPositionProvider: () -> Long,
     totalDurationValue: Long,
+    songDurationHintMs: Long,
     onSeek: (Long) -> Unit,
     expansionFractionProvider: () -> Float,
     isPlayingProvider: () -> Boolean,
@@ -1043,23 +1045,26 @@ private fun PlayerProgressBarSection(
     loadingTweaks: FullPlayerLoadingTweaks? = null,
     modifier: Modifier = Modifier
 ) {
-    val expansionFraction by remember { derivedStateOf { expansionFractionProvider() } }
-    
-    val isVisible by remember { derivedStateOf { expansionFraction > 0.01f } }
+    val expansionFraction = expansionFractionProvider()
+    val isVisible = expansionFraction > 0.01f
+    val isExpanded = currentSheetState == PlayerSheetState.EXPANDED && expansionFraction >= 0.995f
 
-    val isExpanded by remember { 
-        derivedStateOf { 
-            currentSheetState == PlayerSheetState.EXPANDED && expansionFraction >= 0.995f 
-        } 
+    val reportedDuration = totalDurationValue.coerceAtLeast(0L)
+    val hintDuration = songDurationHintMs.coerceAtLeast(0L)
+    val displayDurationValue = when {
+        reportedDuration <= 0L && hintDuration <= 0L -> 0L
+        reportedDuration <= 0L -> hintDuration
+        hintDuration <= 0L -> reportedDuration
+        kotlin.math.abs(reportedDuration - hintDuration) <= 1500L -> reportedDuration
+        else -> minOf(reportedDuration, hintDuration)
     }
-
-    val durationForCalc = totalDurationValue.coerceAtLeast(1L)
+    val durationForCalc = displayDurationValue.coerceAtLeast(1L)
     
     // Pass isVisible to rememberSmoothProgress
     val (smoothProgressState, _) = rememberSmoothProgress(
         isPlayingProvider = isPlayingProvider,
         currentPositionProvider = currentPositionProvider,
-        totalDuration = totalDurationValue,
+        totalDuration = displayDurationValue,
         sampleWhilePlayingMs = 200L,
         sampleWhilePausedMs = 800L,
         isVisible = isVisible
@@ -1118,10 +1123,10 @@ private fun PlayerProgressBarSection(
     // No LaunchedEffect/snapshotFlow needed anymore. 
     // smoothProgressState is already 60fps animated.
 
-    val effectivePositionState = remember(durationForCalc, animatedProgressState, isVisible, totalDurationValue) {
+    val effectivePositionState = remember(durationForCalc, animatedProgressState, isVisible, displayDurationValue) {
         derivedStateOf {
              val progress = animatedProgressState.value
-             (progress * durationForCalc).roundToLong().coerceIn(0L, totalDurationValue.coerceAtLeast(0L))
+             (progress * durationForCalc).roundToLong().coerceIn(0L, displayDurationValue)
         }
     }
 
@@ -1177,7 +1182,7 @@ private fun PlayerProgressBarSection(
             // Isolated Time Labels
             EfficientTimeLabels(
                 positionState = effectivePositionState,
-                duration = totalDurationValue,
+                duration = displayDurationValue,
                 isVisible = isVisible,
                 textColor = timeTextColor
             )
@@ -1206,7 +1211,7 @@ private fun EfficientSlider(
         isPlaying = isPlaying,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp, horizontal = 6.dp)
+            .padding(vertical = 8.dp, horizontal = 0.dp)
     )
 }
 

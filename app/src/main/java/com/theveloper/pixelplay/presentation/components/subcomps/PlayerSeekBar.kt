@@ -88,7 +88,7 @@ fun PlayerSeekBar(
         WavySliderExpressive(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 6.dp),
+                .padding(horizontal = 0.dp),
                 //.weight(0.8f),
             value = seekFraction,
             onValueChange = { newFraction ->
