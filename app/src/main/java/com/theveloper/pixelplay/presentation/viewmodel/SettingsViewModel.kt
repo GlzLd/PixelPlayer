@@ -12,6 +12,7 @@ import com.theveloper.pixelplay.data.preferences.LibraryNavigationMode
 import com.theveloper.pixelplay.data.preferences.ThemePreference
 import com.theveloper.pixelplay.data.preferences.UserPreferencesRepository
 import com.theveloper.pixelplay.data.preferences.AlbumArtQuality
+import com.theveloper.pixelplay.data.preferences.AlbumArtPaletteStyle
 import com.theveloper.pixelplay.data.preferences.FullPlayerLoadingTweaks
 import com.theveloper.pixelplay.data.repository.LyricsRepository
 import com.theveloper.pixelplay.data.repository.MusicRepository
@@ -36,6 +37,7 @@ data class SettingsUiState(
     val isLoadingDirectories: Boolean = false,
     val appThemeMode: String = AppThemeMode.FOLLOW_SYSTEM,
     val playerThemePreference: String = ThemePreference.ALBUM_ART,
+    val albumArtPaletteStyle: AlbumArtPaletteStyle = AlbumArtPaletteStyle.default,
     val mockGenresEnabled: Boolean = false,
     val navBarCornerRadius: Int = 32,
     val navBarStyle: String = NavBarStyle.DEFAULT,
@@ -92,6 +94,7 @@ private sealed interface SettingsUiUpdate {
         val appRebrandDialogShown: Boolean,
         val appThemeMode: String,
         val playerThemePreference: String,
+        val albumArtPaletteStyle: AlbumArtPaletteStyle,
         val mockGenresEnabled: Boolean,
         val navBarCornerRadius: Int,
         val navBarStyle: String,
@@ -178,6 +181,7 @@ class SettingsViewModel @Inject constructor(
                 userPreferencesRepository.appRebrandDialogShownFlow,
                 userPreferencesRepository.appThemeModeFlow,
                 userPreferencesRepository.playerThemePreferenceFlow,
+                userPreferencesRepository.albumArtPaletteStyleFlow,
                 userPreferencesRepository.mockGenresEnabledFlow,
                 userPreferencesRepository.navBarCornerRadiusFlow,
                 userPreferencesRepository.navBarStyleFlow,
@@ -189,12 +193,13 @@ class SettingsViewModel @Inject constructor(
                     appRebrandDialogShown = values[0] as Boolean,
                     appThemeMode = values[1] as String,
                     playerThemePreference = values[2] as String,
-                    mockGenresEnabled = values[3] as Boolean,
-                    navBarCornerRadius = values[4] as Int,
-                    navBarStyle = values[5] as String,
-                    libraryNavigationMode = values[6] as String,
-                    carouselStyle = values[7] as String,
-                    launchTab = values[8] as String
+                    albumArtPaletteStyle = values[3] as AlbumArtPaletteStyle,
+                    mockGenresEnabled = values[4] as Boolean,
+                    navBarCornerRadius = values[5] as Int,
+                    navBarStyle = values[6] as String,
+                    libraryNavigationMode = values[7] as String,
+                    carouselStyle = values[8] as String,
+                    launchTab = values[9] as String
                 )
             }.collect { update ->
                 _uiState.update { state ->
@@ -202,6 +207,7 @@ class SettingsViewModel @Inject constructor(
                         appRebrandDialogShown = update.appRebrandDialogShown,
                         appThemeMode = update.appThemeMode,
                         playerThemePreference = update.playerThemePreference,
+                        albumArtPaletteStyle = update.albumArtPaletteStyle,
                         mockGenresEnabled = update.mockGenresEnabled,
                         navBarCornerRadius = update.navBarCornerRadius,
                         navBarStyle = update.navBarStyle,
@@ -339,6 +345,12 @@ class SettingsViewModel @Inject constructor(
     fun setPlayerThemePreference(preference: String) {
         viewModelScope.launch {
             userPreferencesRepository.setPlayerThemePreference(preference)
+        }
+    }
+
+    fun setAlbumArtPaletteStyle(style: AlbumArtPaletteStyle) {
+        viewModelScope.launch {
+            userPreferencesRepository.setAlbumArtPaletteStyle(style)
         }
     }
 
