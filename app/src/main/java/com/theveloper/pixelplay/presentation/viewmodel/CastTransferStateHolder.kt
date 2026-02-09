@@ -67,8 +67,13 @@ class CastTransferStateHolder @Inject constructor(
     private var onSongChanged: ((String?) -> Unit)? = null
 
     // Session Management
-    private val sessionManager: SessionManager by lazy {
-        CastContext.getSharedInstance(context).sessionManager
+    private val sessionManager: SessionManager? by lazy {
+        try {
+            CastContext.getSharedInstance(context).sessionManager
+        } catch (e: Exception) {
+            Timber.tag(CAST_LOG_TAG).e(e, "Failed to get CastContext sharedInstance")
+            null
+        }
     }
     
     // We retain MediaRouter reference if needed, but managing routes is usually done via callbacks
@@ -205,10 +210,10 @@ class CastTransferStateHolder @Inject constructor(
             }
         }
         
-        sessionManager.addSessionManagerListener(castSessionManagerListener as SessionManagerListener<CastSession>, CastSession::class.java)
+        sessionManager?.addSessionManagerListener(castSessionManagerListener as SessionManagerListener<CastSession>, CastSession::class.java)
         
         // Sync initial state if session exists
-        val currentSession = sessionManager.currentCastSession
+        val currentSession = sessionManager?.currentCastSession
         castStateHolder.setCastSession(currentSession)
         castStateHolder.setRemotePlaybackActive(currentSession != null)
         
@@ -225,7 +230,7 @@ class CastTransferStateHolder @Inject constructor(
         sessionSuspendedRecoveryJob?.cancel()
         sessionSuspendedRecoveryJob = scope?.launch {
             delay(12000)
-            val activeSession = sessionManager.currentCastSession
+            val activeSession = sessionManager?.currentCastSession
             val stillSameSession = activeSession === suspendedSession
             val hasRemoteClient = activeSession?.remoteMediaClient != null
             if (stillSameSession && !hasRemoteClient) {

@@ -13,10 +13,10 @@ import com.theveloper.pixelplay.data.model.Song
 import com.theveloper.pixelplay.data.service.player.CastPlayer
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,8 +31,17 @@ import javax.inject.Singleton
 class CastStateHolder @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val CAST_STATE_TAG = "CastStateHolder"
+
     // Cast session manager
-    val sessionManager: SessionManager = CastContext.getSharedInstance(context).sessionManager
+    val sessionManager: SessionManager? by lazy {
+        try {
+            CastContext.getSharedInstance(context).sessionManager
+        } catch (e: Exception) {
+            Timber.tag(CAST_STATE_TAG).e(e, "Failed to get CastContext sharedInstance")
+            null
+        }
+    }
     
     // Current cast session
     private val _castSession = MutableStateFlow<CastSession?>(null)
