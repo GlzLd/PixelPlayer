@@ -22,6 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,6 +61,13 @@ class LibraryStateHolder @Inject constructor(
     // Sort Options
     private val _currentSongSortOption = MutableStateFlow<SortOption>(SortOption.SongDefaultOrder)
     val currentSongSortOption = _currentSongSortOption.asStateFlow()
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val songsPagingFlow: kotlinx.coroutines.flow.Flow<androidx.paging.PagingData<Song>> = _currentSongSortOption
+        .flatMapLatest { sortOption ->
+            musicRepository.getPaginatedSongs(sortOption)
+        }
+        .flowOn(Dispatchers.IO)
 
     private val _currentAlbumSortOption = MutableStateFlow<SortOption>(SortOption.AlbumTitleAZ)
     val currentAlbumSortOption = _currentAlbumSortOption.asStateFlow()
@@ -344,6 +352,12 @@ class LibraryStateHolder @Inject constructor(
     fun updateSong(updatedSong: Song) {
         _allSongs.update { currentList ->
             currentList.map { if (it.id == updatedSong.id) updatedSong else it }.toImmutableList()
+        }
+    }
+
+    fun removeSong(songId: String) {
+        _allSongs.update { currentList ->
+            currentList.filter { it.id != songId }.toImmutableList()
         }
     }
 }

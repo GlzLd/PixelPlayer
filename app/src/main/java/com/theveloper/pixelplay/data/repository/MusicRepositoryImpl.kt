@@ -86,7 +86,8 @@ class MusicRepositoryImpl @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val songRepository: SongRepository,
     private val favoritesDao: FavoritesDao,
-    private val artistImageRepository: ArtistImageRepository
+    private val artistImageRepository: ArtistImageRepository,
+    private val folderTreeBuilder: FolderTreeBuilder
 ) : MusicRepository {
 
     private val directoryScanMutex = Mutex()
@@ -104,9 +105,9 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun getPaginatedSongs(): Flow<PagingData<Song>> {
-       // Delegate to reactive repository for correct filtering and paging
-       return songRepository.getPaginatedSongs()
+    override fun getPaginatedSongs(sortOption: com.theveloper.pixelplay.data.model.SortOption): Flow<PagingData<Song>> {
+        // Delegate to reactive repository for correct filtering and paging
+        return songRepository.getPaginatedSongs(sortOption)
     }
 
     override fun getSongCountFlow(): Flow<Int> {
@@ -117,106 +118,79 @@ class MusicRepositoryImpl @Inject constructor(
         musicDao.getRandomSongs(limit).map { it.toSong() }
     }
 
+    /**
+     * Compute allowed parent directories by subtracting blocked dirs from all known dirs.
+     * Returns Pair(allowedDirs, applyFilter) for use with Room DAO filtered queries.
+     */
+    private suspend fun computeAllowedDirs(blockedDirs: Set<String>): Pair<List<String>, Boolean> {
+        if (blockedDirs.isEmpty()) return Pair(emptyList(), false)
+        val resolver = DirectoryRuleResolver(
+            emptySet(),
+            blockedDirs.map(::normalizePath).toSet()
+        )
+        val allDirs = musicDao.getDistinctParentDirectories()
+        val allowed = allDirs.filter { !resolver.isBlocked(normalizePath(it)) }
+        return Pair(allowed, true)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getAlbums(): Flow<List<Album>> {
-        return getAudioFiles().map { songs ->
-            songs.groupBy { it.albumId }
-                .map { (albumId, songs) ->
-                    val first = songs.first()
-                    Album(
-                        id = albumId,
-                        title = first.album,
-                        artist = first.artist, // Or albumArtist if available
-                        albumArtUriString = first.albumArtUriString,
-                        songCount = songs.size,
-                        year = first.year
-                    )
-                }
-                .sortedBy { it.title.lowercase() }
-        }.flowOn(Dispatchers.Default)
+        return userPreferencesRepository.blockedDirectoriesFlow
+            .flatMapLatest { blockedDirs ->
+                val (allowedDirs, applyFilter) = computeAllowedDirs(blockedDirs)
+                musicDao.getAlbums(allowedDirs, applyFilter)
+                    .map { entities -> entities.map { it.toAlbum() } }
+            }.flowOn(Dispatchers.IO)
     }
 
     override fun getAlbumById(id: Long): Flow<Album?> {
-        return getAlbums().map { albums -> 
-            albums.find { it.id == id }
-        }
+        return musicDao.getAlbumById(id).map { it?.toAlbum() }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getArtists(): Flow<List<Artist>> {
-        // Combine MediaStore songs (for filtering/grouping) with DB Artists (for Image URLs)
-        return combine(
-            getAudioFiles(),
-            musicDao.getAllArtistsRaw()
-        ) { songs, dbArtists ->
-            val dbArtistsByNormalizedName = dbArtists.associateBy { it.name.trim().lowercase() }
-            
-            val artists = songs.groupBy { it.artistId }
-                .map { (artistId, songs) ->
-                    val first = songs.first()
-                    val normalizedArtistName = first.artist.trim().lowercase()
-                    // Read image from DB using artist name to avoid ID mismatches across data sources.
-                    val imageUrl = dbArtistsByNormalizedName[normalizedArtistName]?.imageUrl
-                    
-                    Artist(
-                        id = artistId,
-                        name = first.artist,
-                        songCount = songs.size,
-                        imageUrl = imageUrl
-                    )
-                }
-                .sortedBy { it.name.lowercase() }
-            
-            // Trigger prefetch for missing images
-            // We use a separate list to avoid passing the entire heavy payload to the IO dispatcher if not needed
-            val missingImages = artists.asSequence()
-                .filter { it.imageUrl.isNullOrEmpty() && it.name.isNotBlank() }
-                .map { artist ->
-                    val normalizedArtistName = artist.name.trim().lowercase()
-                    val cacheArtistId = dbArtistsByNormalizedName[normalizedArtistName]?.id ?: artist.id
-                    cacheArtistId to artist.name
-                }
-                .distinctBy { (_, artistName) -> artistName.trim().lowercase() }
-                .toList()
-            if (missingImages.isNotEmpty()) {
-                // Ensure this doesn't block the UI flow emission
-               kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                    artistImageRepository.prefetchArtistImages(missingImages)
-               }
-            }
-            artists
-        }.flowOn(Dispatchers.Default)
+        return userPreferencesRepository.blockedDirectoriesFlow
+            .flatMapLatest { blockedDirs ->
+                val (allowedDirs, applyFilter) = computeAllowedDirs(blockedDirs)
+                musicDao.getArtistsWithSongCountsFiltered(allowedDirs, applyFilter)
+                    .map { entities ->
+                        val artists = entities.map { it.toArtist() }
+                        // Trigger prefetch for missing images
+                        val missingImages = artists.asSequence()
+                            .filter { it.imageUrl.isNullOrEmpty() && it.name.isNotBlank() }
+                            .map { it.id to it.name }
+                            .distinctBy { (_, name) -> name.trim().lowercase() }
+                            .toList()
+                        if (missingImages.isNotEmpty()) {
+                            kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+                                artistImageRepository.prefetchArtistImages(missingImages)
+                            }
+                        }
+                        artists
+                    }
+            }.flowOn(Dispatchers.IO)
     }
 
     override fun getSongsForAlbum(albumId: Long): Flow<List<Song>> {
-        return getAudioFiles().map { songs ->
-            songs.filter { it.albumId == albumId }
-                .sortedBy { it.trackNumber }
-        }
+        return musicDao.getSongsByAlbumId(albumId).map { entities ->
+            entities.map { it.toSong() }.sortedBy { it.trackNumber }
+        }.flowOn(Dispatchers.IO)
     }
 
     override fun getArtistById(artistId: Long): Flow<Artist?> {
-         return getArtists().map { artists ->
-             artists.find { it.id == artistId }
-         }
+        return musicDao.getArtistById(artistId).map { it?.toArtist() }
     }
 
     override fun getArtistsForSong(songId: Long): Flow<List<Artist>> {
-        // Simple implementation assuming single artist per song as per MediaStore
-        // For multi-artist, we would parse the separator/delimiter here.
-        return getAudioFiles().map { songs ->
-            val song = songs.find { it.id == songId.toString() }
-            if (song != null) {
-                listOf(Artist(id = song.artistId, name = song.artist, songCount = 1, imageUrl = null))
-            } else {
-                emptyList()
-            }
-        }
+        return musicDao.getArtistsForSong(songId).map { entities ->
+            entities.map { it.toArtist() }
+        }.flowOn(Dispatchers.IO)
     }
 
     override fun getSongsForArtist(artistId: Long): Flow<List<Song>> {
-        return getAudioFiles().map { songs ->
-            songs.filter { it.artistId == artistId }
-                .sortedBy { it.title }
-        }
+        return musicDao.getSongsForArtist(artistId).map { entities ->
+            entities.map { it.toSong() }
+        }.flowOn(Dispatchers.IO)
     }
 
     override suspend fun getAllUniqueAudioDirectories(): Set<String> = withContext(Dispatchers.IO) {
@@ -494,139 +468,14 @@ class MusicRepositoryImpl @Inject constructor(
             userPreferencesRepository.isFolderFilterActiveFlow,
             userPreferencesRepository.foldersSourceFlow
         ) { songs, allowedDirs, blockedDirs, isFolderFilterActive, folderSource ->
-            val resolver = DirectoryRuleResolver(
-                allowedDirs.map(::normalizePath).toSet(),
-                blockedDirs.map(::normalizePath).toSet()
+            folderTreeBuilder.buildFolderTree(
+                songs = songs,
+                allowedDirs = allowedDirs,
+                blockedDirs = blockedDirs,
+                isFolderFilterActive = isFolderFilterActive,
+                folderSource = folderSource,
+                context = context
             )
-            val filteredByRules = if (isFolderFilterActive && blockedDirs.isNotEmpty()) {
-                songs.filter { song ->
-                    val songDir = File(song.path).parentFile ?: return@filter false
-                    val normalized = normalizePath(songDir.path)
-                    !resolver.isBlocked(normalized)
-                }
-            } else {
-                songs
-            }
-
-            if (filteredByRules.isEmpty()) return@combine emptyList()
-
-            val storages = StorageUtils.getAvailableStorages(context)
-            val internalStorageRoot = storages
-                .firstOrNull { it.storageType == StorageType.INTERNAL }
-                ?.path
-                ?.path
-                ?: Environment.getExternalStorageDirectory().path
-            val sdStorageRoot = storages
-                .firstOrNull { it.storageType == StorageType.SD_CARD }
-                ?.path
-                ?.path
-
-            val selectedRootPath = when (folderSource) {
-                FolderSource.INTERNAL -> internalStorageRoot
-                FolderSource.SD_CARD -> sdStorageRoot ?: return@combine emptyList()
-            }
-            val normalizedSelectedRoot = normalizePath(selectedRootPath)
-
-            val songsToProcess = filteredByRules.filter { song ->
-                val songDir = File(song.path).parentFile ?: return@filter false
-                val normalizedDir = normalizePath(songDir.path)
-                normalizedDir == normalizedSelectedRoot ||
-                    normalizedDir.startsWith("$normalizedSelectedRoot/")
-            }
-
-            if (songsToProcess.isEmpty()) return@combine emptyList()
-
-            data class TempFolder(
-                val path: String,
-                val name: String,
-                val songs: MutableList<Song> = mutableListOf(),
-                val subFolderPaths: MutableSet<String> = mutableSetOf()
-            )
-
-            val tempFolders = mutableMapOf<String, TempFolder>()
-
-            // Optimization: Group songs by parent folder first to reduce File object creations and loop iterations
-            val songsByFolder = songsToProcess.groupBy { File(it.path).parent }
-
-            songsByFolder.forEach { (rawFolderPath, songsInFolder) ->
-                if (rawFolderPath != null) {
-                    val folderPath = normalizePath(rawFolderPath)
-                    val folderFile = File(folderPath)
-                    // Create or get the leaf folder
-                    val leafFolder = tempFolders.getOrPut(folderPath) { TempFolder(folderPath, folderFile.name) }
-                    leafFolder.songs.addAll(songsInFolder)
-
-                    // Build hierarchy upwards
-                    var currentPath = folderPath
-                    var currentFile = folderFile
-
-                    while (currentFile.parentFile != null) {
-                        val parentFile = currentFile.parentFile!!
-                        val parentPath = normalizePath(parentFile.path)
-
-                        val parentFolder = tempFolders.getOrPut(parentPath) { TempFolder(parentPath, parentFile.name) }
-                        val added = parentFolder.subFolderPaths.add(currentPath)
-
-                        if (!added) {
-                            // If the link already existed, we have processed this branch up to the root already.
-                            break
-                        }
-
-                        currentFile = parentFile
-                        currentPath = parentPath
-                    }
-                }
-            }
-
-            fun buildImmutableFolder(path: String, visited: MutableSet<String>): MusicFolder? {
-                if (path in visited) return null
-                visited.add(path)
-                val tempFolder = tempFolders[path] ?: return null
-                val subFolders = tempFolder.subFolderPaths
-                    .mapNotNull { subPath -> buildImmutableFolder(subPath, visited.toMutableSet()) }
-                    .sortedBy { it.name.lowercase() }
-                    .toImmutableList()
-                return MusicFolder(
-                    path = tempFolder.path,
-                    name = tempFolder.name,
-                    songs = tempFolder.songs
-                        .sortedWith(
-                            compareBy<Song> { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
-                                .thenBy { it.title.lowercase() }
-                        )
-                        .toImmutableList(),
-                    subFolders = subFolders
-                )
-            }
-
-            val rootTempFolder = tempFolders[normalizedSelectedRoot]
-
-            val result = rootTempFolder?.subFolderPaths?.mapNotNull { path ->
-                buildImmutableFolder(path, mutableSetOf())
-            }?.filter { it.totalSongCount > 0 }?.sortedBy { it.name.lowercase() } ?: emptyList()
-
-            // Fallback for devices that might not use the standard storage root path
-            if (result.isEmpty() && tempFolders.isNotEmpty()) {
-                 val allSubFolderPaths = tempFolders.values.flatMap { it.subFolderPaths }.toSet()
-                 val topLevelPaths = (tempFolders.keys - allSubFolderPaths)
-                     .filter { topLevelPath ->
-                         topLevelPath == normalizedSelectedRoot ||
-                             topLevelPath.startsWith("$normalizedSelectedRoot/")
-                     }
-                     .flatMap { topLevelPath ->
-                         if (topLevelPath == normalizedSelectedRoot) {
-                             tempFolders[topLevelPath]?.subFolderPaths ?: emptySet()
-                         } else {
-                             setOf(topLevelPath)
-                         }
-                     }
-                 return@combine topLevelPaths
-                     .mapNotNull { topLevelPath -> buildImmutableFolder(topLevelPath, mutableSetOf()) }
-                     .filter { it.totalSongCount > 0 }
-                    .sortedBy { it.name.lowercase() }
-             }
-
-            result
         }.conflate().flowOn(Dispatchers.IO)
     }
 
