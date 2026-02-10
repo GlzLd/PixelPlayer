@@ -369,7 +369,7 @@ class PlayerViewModel @Inject constructor(
     // Connectivity is now managed by ConnectivityStateHolder
     
     // Cast state is now managed by CastStateHolder
-    private val sessionManager: SessionManager get() = castStateHolder.sessionManager
+    private val sessionManager: SessionManager? get() = castStateHolder.sessionManager
 
     val isRemotePlaybackActive: StateFlow<Boolean> = castStateHolder.isRemotePlaybackActive
     val isCastConnecting: StateFlow<Boolean> = castStateHolder.isCastConnecting
@@ -775,7 +775,7 @@ class PlayerViewModel @Inject constructor(
         Log.i("PlayerViewModel", "init started.")
 
         // Cast initialization if already connected
-        val currentSession = sessionManager.currentCastSession
+        val currentSession = sessionManager?.currentCastSession
         if (currentSession != null) {
             castStateHolder.setCastPlayer(CastPlayer(currentSession, context.contentResolver))
             castStateHolder.setRemotePlaybackActive(true)
