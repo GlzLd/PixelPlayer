@@ -3000,14 +3000,13 @@ class PlayerViewModel @Inject constructor(
         castSongUiSyncJob?.cancel()
         stopProgressUpdates()
         listeningStatsTracker.onCleared()
-        listeningStatsTracker.onCleared()
+        castTransferStateHolder.onCleared()
         castStateHolder.onCleared()
         searchStateHolder.onCleared()
         aiStateHolder.onCleared()
         libraryStateHolder.onCleared()
         sleepTimerStateHolder.onCleared()
         connectivityStateHolder.onCleared()
-
     }
 
     // Sleep Timer Control Functions - delegated to SleepTimerStateHolder
