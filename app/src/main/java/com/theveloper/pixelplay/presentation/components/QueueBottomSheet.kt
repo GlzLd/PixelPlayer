@@ -290,13 +290,31 @@ fun QueueBottomSheet(
     // Track queue order by content (not list identity) to avoid clearing preview
     // when upstream emits equivalent list instances during drag.
     var reorderPreviewQueueSignature by remember { mutableStateOf<Int?>(null) }
-    val displaySongsSignature = remember(displaySongs) {
-        displaySongs.fold(displaySongs.size) { acc, song ->
-            (acc * 31) + song.id.hashCode()
-        }
+    val displaySongsSignature = remember(displaySongs, queueIndexOffset) {
+        (queueIndexOffset * 31) + System.identityHashCode(displaySongs)
     }
 
     fun remapCommittedKeysForDisplay(newSongs: List<Song>) {
+        // Fast path: common queue-skip case where display list is just a suffix of previous display list.
+        if (committedDisplaySongIds.isNotEmpty() && newSongs.isNotEmpty()) {
+            val firstNewId = newSongs.first().id
+            val startIndex = committedDisplaySongIds.indexOf(firstNewId)
+            if (startIndex >= 0 && startIndex + newSongs.size <= committedDisplaySongIds.size) {
+                var suffixMatches = true
+                for (i in newSongs.indices) {
+                    if (committedDisplaySongIds[startIndex + i] != newSongs[i].id) {
+                        suffixMatches = false
+                        break
+                    }
+                }
+                if (suffixMatches) {
+                    committedDisplaySongIds = committedDisplaySongIds.subList(startIndex, startIndex + newSongs.size).toList()
+                    committedDisplayKeys = committedDisplayKeys.subList(startIndex, startIndex + newSongs.size).toList()
+                    return
+                }
+            }
+        }
+
         val reusableKeysBySongId = mutableMapOf<String, ArrayDeque<Long>>()
         committedDisplaySongIds.forEachIndexed { index, songId ->
             val key = committedDisplayKeys.getOrNull(index) ?: return@forEachIndexed
@@ -323,10 +341,10 @@ fun QueueBottomSheet(
 
     // Reset local reorder preview only when the queue truly changes to something new.
     LaunchedEffect(displaySongsSignature, queueIndexOffset) {
-        val currentDisplayIds = displaySongs.map { it.id }
         val expectedIds = pendingReorderExpectedIds
 
         if (expectedIds != null) {
+            val currentDisplayIds = displaySongs.map { it.id }
             if (currentDisplayIds == expectedIds) {
                 reorderPreviewKeys
                     ?.takeIf { it.size == displaySongs.size }
@@ -740,12 +758,19 @@ fun QueueBottomSheet(
                                     state = reorderableState,
                                     key = itemStableKey,
                                     enabled = canReorder,
-                                    animateItemModifier = Modifier.animateItem(
-                                        placementSpec = spring(
-                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                            stiffness = Spring.StiffnessMediumLow
+                                    animateItemModifier = when {
+                                        isReordering || reorderHandleInUse || reorderPreviewOrder != null -> Modifier.animateItem(
+                                            placementSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow
+                                            )
                                         )
-                                    )
+                                        else -> Modifier.animateItem(
+                                            fadeInSpec = tween(durationMillis = 140),
+                                            fadeOutSpec = tween(durationMillis = 120),
+                                            placementSpec = tween(durationMillis = 180)
+                                        )
+                                    }
                                 ) { isDragging ->
                                     val scale by animateFloatAsState(
                                         targetValue = if (isDragging) 1.015f else 1f,

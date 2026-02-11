@@ -175,10 +175,10 @@ internal fun UnifiedPlayerSongInfoLayer(
                 onToggleFavorite = { playerViewModel.toggleFavoriteSpecificSong(liveSong) },
                 onDismiss = onDismissSongInfo,
                 onPlaySong = {
-                    playerViewModel.playSongs(
-                        currentPlaybackQueueProvider(),
-                        liveSong,
-                        currentQueueSourceNameProvider()
+                    playerViewModel.showAndPlaySong(
+                        song = liveSong,
+                        contextSongs = currentPlaybackQueueProvider(),
+                        queueName = currentQueueSourceNameProvider()
                     )
                     onDismissSongInfo()
                 },
@@ -290,10 +290,10 @@ internal fun UnifiedPlayerQueueAndSongInfoHost(
             }
             val onPlayQueueSong = remember(playerViewModel) {
                 { song: Song ->
-                    playerViewModel.playSongs(
-                        latestPlaybackQueue.value,
-                        song,
-                        latestQueueSourceName.value
+                    playerViewModel.showAndPlaySong(
+                        song = song,
+                        contextSongs = latestPlaybackQueue.value,
+                        queueName = latestQueueSourceName.value
                     )
                 }
             }
