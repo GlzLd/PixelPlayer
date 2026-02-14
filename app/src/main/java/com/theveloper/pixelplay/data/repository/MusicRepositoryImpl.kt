@@ -202,7 +202,7 @@ class MusicRepositoryImpl @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    override fun getAlbums(): Flow<List<Album>> {
+    override fun getAlbums(storageFilter: com.theveloper.pixelplay.data.model.StorageFilter): Flow<List<Album>> {
         return combine(
             userPreferencesRepository.allowedDirectoriesFlow,
             userPreferencesRepository.blockedDirectoriesFlow
@@ -210,7 +210,7 @@ class MusicRepositoryImpl @Inject constructor(
             allowedDirs to blockedDirs
         }.flatMapLatest { (allowedDirs, blockedDirs) ->
             val (allowedParentDirs, applyFilter) = computeAllowedDirs(allowedDirs, blockedDirs)
-            musicDao.getAlbums(allowedParentDirs, applyFilter)
+            musicDao.getAlbums(allowedParentDirs, applyFilter, storageFilter.value)
                 .map { entities -> entities.map { it.toAlbum() } }
         }.flowOn(Dispatchers.IO)
     }

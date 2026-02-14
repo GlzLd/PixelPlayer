@@ -61,7 +61,7 @@ interface MusicRepository {
      * Obtiene la lista de álbumes filtrada.
      * @return Flow que emite una lista completa de objetos Album.
      */
-    fun getAlbums(): Flow<List<Album>> // Existing Flow for reactive updates
+    fun getAlbums(storageFilter: com.theveloper.pixelplay.data.model.StorageFilter = com.theveloper.pixelplay.data.model.StorageFilter.ALL): Flow<List<Album>> // Existing Flow for reactive updates
 
     /**
      * Obtiene la lista de artistas filtrada.

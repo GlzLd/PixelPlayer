@@ -38,16 +38,21 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.ViewList
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Cloud
-import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -327,25 +332,42 @@ fun LibraryActionRow(
                     exit = slideOutHorizontally(targetOffsetX = { it / 2 }) + fadeOut()
                 ) {
                      val finalIcon = when(currentStorageFilter) {
-                         com.theveloper.pixelplay.data.model.StorageFilter.ALL -> Icons.Rounded.ViewList
+                         com.theveloper.pixelplay.data.model.StorageFilter.ALL -> Icons.Rounded.FilterList
                          com.theveloper.pixelplay.data.model.StorageFilter.ONLINE -> Icons.Rounded.Cloud
-                         com.theveloper.pixelplay.data.model.StorageFilter.OFFLINE -> Icons.Rounded.Edit // TODO: Replace with proper offline icon
+                         com.theveloper.pixelplay.data.model.StorageFilter.OFFLINE -> Icons.Rounded.PhoneAndroid
                      }
+                     val tooltipText = when(currentStorageFilter) {
+                         com.theveloper.pixelplay.data.model.StorageFilter.ALL -> "All Songs"
+                         com.theveloper.pixelplay.data.model.StorageFilter.ONLINE -> "Online"
+                         com.theveloper.pixelplay.data.model.StorageFilter.OFFLINE -> "Offline"
+                     }
+                     val tooltipState = rememberTooltipState()
 
-                    FilledTonalIconButton(
-                        onClick = onStorageFilterClick,
-                        shape = RoundedCornerShape(
-                            topStart = filterStartCorner,
-                            bottomStart = filterStartCorner,
-                            topEnd = filterEndCorner,
-                            bottomEnd = filterEndCorner
-                        ),
-                        modifier = Modifier.size(genHeight)
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(),
+                        tooltip = {
+                            PlainTooltip {
+                                Text(tooltipText)
+                            }
+                        },
+                        state = tooltipState
                     ) {
-                         Icon(
-                            imageVector = finalIcon,
-                            contentDescription = "Storage Filter"
-                        )
+                        FilledTonalIconButton(
+                            onClick = onStorageFilterClick,
+                            shape = RoundedCornerShape(
+                                topStart = filterStartCorner,
+                                bottomStart = filterStartCorner,
+                                topEnd = filterEndCorner,
+                                bottomEnd = filterEndCorner
+                            ),
+                            modifier = Modifier.size(genHeight)
+                        ) {
+                             Icon(
+                                imageVector = finalIcon,
+                                contentDescription = tooltipText
+                            )
+                        }
                     }
                 }
 

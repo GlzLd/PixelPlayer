@@ -1484,7 +1484,9 @@ constructor(
                     lyrics = null,
                     mimeType = tSong.mimeType,
                     bitrate = 0,
-                    sampleRate = 0
+                    sampleRate = 0,
+                    telegramChatId = tSong.chatId,
+                    telegramFileId = tSong.fileId
                 )
                 songsToInsert.add(songEntity)
             }
