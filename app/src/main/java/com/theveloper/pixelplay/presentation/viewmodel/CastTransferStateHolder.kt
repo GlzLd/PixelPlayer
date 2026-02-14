@@ -1045,7 +1045,7 @@ class CastTransferStateHolder @Inject constructor(
         if (!ensureHttpServerRunning(castDeviceIpHint)) return false
 
         val serverAddress = MediaFileHttpServerService.serverAddress ?: return false
-        val startIndex = songsToPlay.indexOf(startSong).coerceAtLeast(0)
+        val startIndex = songsToPlay.indexOfFirst { it.id == startSong.id }.coerceAtLeast(0)
 
         val repeatMode = playbackStateHolder.stablePlayerState.value.repeatMode
         val castRepeatMode = if (isShuffleEnabled) {
