@@ -53,6 +53,7 @@ import org.drinkless.tdlib.TdApi
 import androidx.compose.runtime.getValue
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
+import com.theveloper.pixelplay.presentation.telegram.dashboard.TelegramDashboardScreen
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 
 @AndroidEntryPoint
@@ -106,7 +107,7 @@ fun TelegramLoginScreen(
 
     if (authState is TdApi.AuthorizationStateReady && !isLoading) {
         // Show the new Dashboard
-        com.theveloper.pixelplay.presentation.telegram.dashboard.TelegramDashboardScreen(
+        TelegramDashboardScreen(
             onAddChannel = { showSearchSheet = true },
             onBack = onFinish
         )
