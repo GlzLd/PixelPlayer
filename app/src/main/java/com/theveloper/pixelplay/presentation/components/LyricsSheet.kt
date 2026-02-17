@@ -116,6 +116,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import com.theveloper.pixelplay.data.preferences.dataStore
+import androidx.compose.ui.graphics.TransformOrigin
 
 import java.io.File
 import kotlin.math.abs
@@ -171,10 +174,7 @@ fun LyricsSheet(
     swipeThreshold: Dp = 100.dp,
     highlightZoneFraction: Float = 0.08f, // Reduced from 0.22 for less padding
     highlightOffsetDp: Dp = 32.dp,
-    autoscrollAnimationSpec: AnimationSpec<Float> = spring(
-        stiffness = Spring.StiffnessMediumLow,
-        dampingRatio = Spring.DampingRatioNoBouncy
-    )
+    autoscrollAnimationSpec: AnimationSpec<Float>? = null // null = auto-detect from preference
 ) {
     BackHandler { onBackClick() }
     val stablePlayerState by stablePlayerStateFlow.collectAsState()
@@ -186,6 +186,21 @@ fun LyricsSheet(
     val currentSong by remember { derivedStateOf { stablePlayerState.currentSong } }
 
     val context = LocalContext.current
+
+    // Read animated lyrics preference internally from DataStore
+    val useAnimatedLyricsFlow = remember(context) {
+        context.dataStore.data.map { it[booleanPreferencesKey("use_animated_lyrics")] ?: false }
+    }
+    val useAnimatedLyrics by useAnimatedLyricsFlow.collectAsState(initial = false)
+
+    val resolvedAutoscrollSpec = autoscrollAnimationSpec ?: if (useAnimatedLyrics) {
+        spring(
+            stiffness = Spring.StiffnessMediumLow,
+            dampingRatio = Spring.DampingRatioLowBouncy
+        )
+    } else {
+        tween(durationMillis = 450, easing = FastOutSlowInEasing)
+    }
 
     var showFetchLyricsDialog by remember { mutableStateOf(false) }
     // Flag to prevent dialog from showing briefly after reset
@@ -523,7 +538,8 @@ fun LyricsSheet(
                                 },
                                 highlightZoneFraction = highlightZoneFraction,
                                 highlightOffsetDp = highlightOffsetDp,
-                                autoscrollAnimationSpec = autoscrollAnimationSpec,
+                                autoscrollAnimationSpec = resolvedAutoscrollSpec,
+                                useAnimatedLyrics = useAnimatedLyrics,
                                 footer = {
                                     if (lyrics?.areFromRemote == true) {
                                         item(key = "provider_text") {
@@ -854,6 +870,7 @@ fun SyncedLyricsList(
     highlightZoneFraction: Float,
     highlightOffsetDp: Dp,
     autoscrollAnimationSpec: AnimationSpec<Float>,
+    useAnimatedLyrics: Boolean = false,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     footer: LazyListScope.() -> Unit = {}
@@ -912,17 +929,14 @@ fun SyncedLyricsList(
                     key = { index, item -> "${item.time}_$index" }
                 ) { index, line ->
                     val nextTime = lines.getOrNull(index + 1)?.time ?: Int.MAX_VALUE
-                    
-                    // Calculate distance from current active line for gradient effect
-                    // limits check to avoid crash if index is out of bounds (though derivedState handles it)
                     val distanceFromCurrent = if (currentLineIndex != -1) abs(currentLineIndex - index) else 100
-                    
                     if (line.line.isNotBlank()) {
                         LyricLineRow(
                             line = line,
                             nextTime = nextTime,
                             position = position,
                             distanceFromCurrent = distanceFromCurrent,
+                            useAnimatedLyrics = useAnimatedLyrics,
                             accentColor = accentColor,
                             style = textStyle,
                             modifier = Modifier
@@ -968,7 +982,8 @@ fun LyricLineRow(
     line: SyncedLine,
     nextTime: Int,
     position: Long,
-    distanceFromCurrent: Int,
+    distanceFromCurrent: Int = 100,
+    useAnimatedLyrics: Boolean = false,
     accentColor: Color,
     style: TextStyle,
     modifier: Modifier = Modifier,
@@ -984,61 +999,58 @@ fun LyricLineRow(
     val unhighlightedColor = LocalContentColor.current.copy(alpha = 0.45f)
     val lineColor by animateColorAsState(
         targetValue = if (isCurrentLine) accentColor else unhighlightedColor,
-        animationSpec = spring(
+        animationSpec = if (useAnimatedLyrics) spring(
             stiffness = Spring.StiffnessVeryLow,
             dampingRatio = Spring.DampingRatioMediumBouncy
-        ),
+        ) else tween(durationMillis = 250),
         label = "lineColor"
     )
-    // Gradient Animation Logic
-    // Distance 0 (Active): Scale 1.1, Padding 24.dp
-    // Distance 1 (Neighbor): Scale 0.95, Padding 12.dp
-    // Distance 2+ (Far): Scale 0.85, Padding 6.dp
-    
-    val targetScale = when (distanceFromCurrent) {
-        0 -> 1.1f
-        1 -> 0.95f
-        else -> 0.85f
-    }
-    
-    val targetPadding = when (distanceFromCurrent) {
-        0 -> 24.dp
-        1 -> 12.dp
-        else -> 6.dp
-    }
-    
-    val targetAlpha = when (distanceFromCurrent) {
-        0 -> 1.0f
-        1 -> 0.6f
-        else -> 0.3f
-    }
+
+    // Animated mode: fisheye scaling + alpha based on distance from current line
+    val targetScale = if (useAnimatedLyrics) when (distanceFromCurrent) {
+        0 -> 1.1f; 1 -> 0.95f; else -> 0.85f
+    } else 1f
+    val targetPadding = if (useAnimatedLyrics) when (distanceFromCurrent) {
+        0 -> 24.dp; 1 -> 12.dp; else -> 6.dp
+    } else 4.dp
+    val targetAlpha = if (useAnimatedLyrics) when (distanceFromCurrent) {
+        0 -> 1.0f; 1 -> 0.6f; else -> 0.3f
+    } else 1f
 
     val scale by animateFloatAsState(
         targetValue = targetScale,
-        animationSpec = spring(
+        animationSpec = if (useAnimatedLyrics) spring(
             stiffness = Spring.StiffnessVeryLow,
             dampingRatio = Spring.DampingRatioMediumBouncy
-        ),
+        ) else tween(durationMillis = 200),
         label = "lineScale"
     )
-
     val verticalPadding by animateDpAsState(
         targetValue = targetPadding,
-        animationSpec = spring(
+        animationSpec = if (useAnimatedLyrics) spring(
             stiffness = Spring.StiffnessVeryLow,
             dampingRatio = Spring.DampingRatioMediumBouncy
-        ),
+        ) else tween(durationMillis = 200),
         label = "linePadding"
     )
-    
     val alpha by animateFloatAsState(
         targetValue = targetAlpha,
-        animationSpec = spring(
-            stiffness = Spring.StiffnessLow, 
+        animationSpec = if (useAnimatedLyrics) spring(
+            stiffness = Spring.StiffnessLow,
             dampingRatio = Spring.DampingRatioNoBouncy
-        ),
+        ) else tween(durationMillis = 200),
         label = "lineAlpha"
     )
+
+    // Animated mode: apply graphicsLayer for scale/alpha transforms
+    val animatedModifier = if (useAnimatedLyrics) {
+        modifier.graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+            this.alpha = alpha
+            transformOrigin = TransformOrigin(0f, 0.5f)
+        }
+    } else modifier
 
     if (sanitizedWords.isNullOrEmpty()) {
         Text(
@@ -1046,26 +1058,14 @@ fun LyricLineRow(
             style = style,
             color = lineColor,
             fontWeight = if (isCurrentLine) FontWeight.Bold else FontWeight.Normal,
-            modifier = modifier
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    this.alpha = alpha
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                }
+            modifier = animatedModifier
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { onClick() }
                 .padding(vertical = verticalPadding, horizontal = 2.dp)
         )
     } else {
         FlowRow(
-            modifier = modifier
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    this.alpha = alpha
-                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0.5f)
-                }
+            modifier = animatedModifier
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { onClick() }
                 .padding(vertical = verticalPadding, horizontal = 2.dp),
@@ -1082,6 +1082,7 @@ fun LyricLineRow(
                     LyricWordSpan(
                         word = word,
                         isHighlighted = isCurrentLine && isCurrentWord,
+                        useAnimatedLyrics = useAnimatedLyrics,
                         style = style,
                         highlightedColor = accentColor,
                         unhighlightedColor = unhighlightedColor
@@ -1096,6 +1097,7 @@ fun LyricLineRow(
 fun LyricWordSpan(
     word: SyncedWord,
     isHighlighted: Boolean,
+    useAnimatedLyrics: Boolean = false,
     style: TextStyle,
     highlightedColor: Color,
     unhighlightedColor: Color,
@@ -1103,10 +1105,10 @@ fun LyricWordSpan(
 ) {
     val color by animateColorAsState(
         targetValue = if (isHighlighted) highlightedColor else unhighlightedColor,
-        animationSpec = spring(
+        animationSpec = if (useAnimatedLyrics) spring(
             stiffness = Spring.StiffnessVeryLow,
             dampingRatio = Spring.DampingRatioMediumBouncy
-        ),
+        ) else tween(durationMillis = 200),
         label = "wordColor"
     )
 
