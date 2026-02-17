@@ -14,6 +14,7 @@ import com.theveloper.pixelplay.PixelPlayApplication
 import com.theveloper.pixelplay.data.database.AlbumArtThemeDao
 import com.theveloper.pixelplay.data.database.EngagementDao
 import com.theveloper.pixelplay.data.database.FavoritesDao
+import com.theveloper.pixelplay.data.database.GDriveDao
 import com.theveloper.pixelplay.data.database.LyricsDao
 import com.theveloper.pixelplay.data.database.MusicDao
 import com.theveloper.pixelplay.data.database.PixelPlayDatabase
@@ -116,7 +117,8 @@ object AppModule {
             PixelPlayDatabase.MIGRATION_17_18,
             PixelPlayDatabase.MIGRATION_18_19,
             PixelPlayDatabase.MIGRATION_19_20,
-            PixelPlayDatabase.MIGRATION_20_21
+            PixelPlayDatabase.MIGRATION_20_21,
+            PixelPlayDatabase.MIGRATION_21_22
         )
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
@@ -162,6 +164,12 @@ object AppModule {
     @Provides
     fun provideLyricsDao(database: PixelPlayDatabase): LyricsDao {
         return database.lyricsDao()
+    }
+
+    @Singleton
+    @Provides
+    fun provideGDriveDao(database: PixelPlayDatabase): GDriveDao {
+        return database.gdriveDao()
     }
 
     @Provides
