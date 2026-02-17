@@ -1,4 +1,4 @@
-package com.theveloper.pixelplay.data.netease
+package com.theveloper.pixelplay.data.gdrive
 
 import android.net.Uri
 import com.theveloper.pixelplay.data.stream.CloudStreamSecurity
@@ -21,67 +21,55 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import timber.log.Timber
 import java.net.ServerSocket
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Local HTTP proxy server for streaming Netease Cloud Music audio.
+ * Local HTTP proxy server for streaming Google Drive audio.
  *
- * Resolves `netease://{songId}` URIs by fetching temporary streaming URLs
- * from the Netease API and proxying the audio data to ExoPlayer.
- *
- * Follows the same architectural pattern as [TelegramStreamProxy] using Ktor CIO.
+ * Resolves `gdrive://{fileId}` URIs by proxying requests to the Drive REST API
+ * with the required Authorization header. Follows the same architectural pattern
+ * as [NeteaseStreamProxy] and [TelegramStreamProxy] using Ktor CIO.
  */
 @Singleton
-class NeteaseStreamProxy @Inject constructor(
-    private val repository: NeteaseRepository,
+class GDriveStreamProxy @Inject constructor(
+    private val repository: GDriveRepository,
     private val okHttpClient: OkHttpClient
 ) {
     private companion object {
         val ALLOWED_REMOTE_HOST_SUFFIXES = setOf(
-            "music.126.net",
-            "music.163.com",
-            "126.net",
-            "163.com"
+            "googleapis.com",
+            "googleusercontent.com"
         )
     }
 
     private var server: ApplicationEngine? = null
     private var actualPort: Int = 0
 
-    // Cache of resolved streaming URLs (they expire, so we track timestamp)
-    private val urlCache = ConcurrentHashMap<Long, CachedUrl>()
-
-    private data class CachedUrl(val url: String, val timestamp: Long) {
-        // Netease URLs typically expire in ~20 minutes, re-fetch after 15
-        fun isExpired(): Boolean = System.currentTimeMillis() - timestamp > 15 * 60 * 1000
-    }
-
     fun isReady(): Boolean = actualPort > 0
 
-    fun getProxyUrl(songId: Long): String {
+    fun getProxyUrl(fileId: String): String {
         if (actualPort == 0) {
-            Timber.w("NeteaseStreamProxy: getProxyUrl called but actualPort is 0")
+            Timber.w("GDriveStreamProxy: getProxyUrl called but actualPort is 0")
             return ""
         }
-        if (!CloudStreamSecurity.validateNeteaseSongId(songId)) {
-            Timber.w("NeteaseStreamProxy: getProxyUrl rejected invalid songId: $songId")
+        if (!CloudStreamSecurity.validateGDriveFileId(fileId)) {
+            Timber.w("GDriveStreamProxy: getProxyUrl rejected invalid fileId")
             return ""
         }
-        return "http://127.0.0.1:$actualPort/netease/$songId"
+        return "http://127.0.0.1:$actualPort/gdrive/$fileId"
     }
 
     /**
-     * Parse a `netease://` URI and return the proxy URL.
-     * Returns null if the URI is not a valid Netease URI.
+     * Parse a `gdrive://` URI and return the proxy URL.
+     * Returns null if the URI is not a valid GDrive URI.
      */
-    fun resolveNeteaseUri(uriString: String): String? {
+    fun resolveGDriveUri(uriString: String): String? {
         val uri = Uri.parse(uriString)
-        if (uri.scheme != "netease") return null
-        val songId = uri.host?.toLongOrNull() ?: return null
-        if (!CloudStreamSecurity.validateNeteaseSongId(songId)) return null
-        return getProxyUrl(songId)
+        if (uri.scheme != "gdrive") return null
+        val fileId = uri.host ?: return null
+        if (!CloudStreamSecurity.validateGDriveFileId(fileId)) return null
+        return getProxyUrl(fileId)
     }
 
     fun start() {
@@ -91,9 +79,9 @@ class NeteaseStreamProxy @Inject constructor(
                 server = createServer(freePort)
                 server!!.start(wait = false)
                 actualPort = freePort
-                Timber.d("NeteaseStreamProxy started on port $actualPort")
+                Timber.d("GDriveStreamProxy started on port $actualPort")
             } catch (e: Exception) {
-                Timber.e(e, "Failed to start NeteaseStreamProxy")
+                Timber.e(e, "Failed to start GDriveStreamProxy")
             }
         }
     }
@@ -102,17 +90,16 @@ class NeteaseStreamProxy @Inject constructor(
         server?.stop(1000, 2000)
         server = null
         actualPort = 0
-        urlCache.clear()
-        Timber.d("NeteaseStreamProxy stopped")
+        Timber.d("GDriveStreamProxy stopped")
     }
 
     private fun createServer(port: Int): ApplicationEngine {
         return embeddedServer(CIO, host = "127.0.0.1", port = port) {
             routing {
-                get("/netease/{songId}") {
-                    val songId = call.parameters["songId"]?.toLongOrNull()
-                    if (songId == null || !CloudStreamSecurity.validateNeteaseSongId(songId)) {
-                        call.respond(HttpStatusCode.BadRequest, "Invalid Song ID")
+                get("/gdrive/{fileId}") {
+                    val fileId = call.parameters["fileId"]
+                    if (fileId.isNullOrBlank() || !CloudStreamSecurity.validateGDriveFileId(fileId)) {
+                        call.respond(HttpStatusCode.BadRequest, "Invalid File ID")
                         return@get
                     }
 
@@ -123,29 +110,57 @@ class NeteaseStreamProxy @Inject constructor(
                             return@get
                         }
 
-                        val streamUrl = getOrFetchStreamUrl(songId)
-                        if (streamUrl == null) {
-                            call.respond(HttpStatusCode.NotFound, "No stream URL available")
-                            return@get
-                        }
+                        val streamUrl = repository.getStreamUrl(fileId)
                         if (!CloudStreamSecurity.isSafeRemoteStreamUrl(
                                 url = streamUrl,
-                                allowedHostSuffixes = ALLOWED_REMOTE_HOST_SUFFIXES,
-                                allowHttpForAllowedHosts = true
+                                allowedHostSuffixes = ALLOWED_REMOTE_HOST_SUFFIXES
                             )
                         ) {
                             call.respond(HttpStatusCode.BadGateway, "Rejected upstream stream URL")
                             return@get
                         }
 
-                        // Proxy the audio stream
-                        val requestBuilder = Request.Builder().url(streamUrl)
+                        val authHeader = repository.getAuthHeader()
+
+                        if (authHeader.isBlank() || authHeader == "Bearer ") {
+                            call.respond(HttpStatusCode.Unauthorized, "No auth token")
+                            return@get
+                        }
+
+                        // Build the request to Google Drive
+                        val requestBuilder = Request.Builder()
+                            .url(streamUrl)
+                            .header("Authorization", authHeader)
+
                         rangeValidation.normalizedHeader?.let {
                             requestBuilder.header("Range", it)
                         }
 
-                        val response = withContext(Dispatchers.IO) {
+                        var response = withContext(Dispatchers.IO) {
                             okHttpClient.newCall(requestBuilder.build()).execute()
+                        }
+
+                        // If 401, try refreshing the token and retry once
+                        if (response.code == 401) {
+                            response.close()
+                            Timber.d("GDriveStreamProxy: 401 received, refreshing token...")
+                            val refreshResult = repository.refreshAccessToken()
+                            if (refreshResult.isSuccess) {
+                                val newAuthHeader = repository.getAuthHeader()
+                                if (newAuthHeader.isBlank() || newAuthHeader == "Bearer ") {
+                                    call.respond(HttpStatusCode.Unauthorized, "Token refresh failed")
+                                    return@get
+                                }
+                                val retryRequest = Request.Builder()
+                                    .url(streamUrl)
+                                    .header("Authorization", newAuthHeader)
+                                rangeValidation.normalizedHeader?.let {
+                                    retryRequest.header("Range", it)
+                                }
+                                response = withContext(Dispatchers.IO) {
+                                    okHttpClient.newCall(retryRequest.build()).execute()
+                                }
+                            }
                         }
 
                         response.use { upstream ->
@@ -158,6 +173,10 @@ class NeteaseStreamProxy @Inject constructor(
                             }
 
                             val body = upstream.body
+                            if (body == null) {
+                                call.respond(HttpStatusCode.BadGateway, "No response body")
+                                return@get
+                            }
 
                             val contentTypeHeader = upstream.header("Content-Type")
                             if (!CloudStreamSecurity.isSupportedAudioContentType(contentTypeHeader)) {
@@ -205,27 +224,15 @@ class NeteaseStreamProxy @Inject constructor(
                         if (msg.contains("ChannelWriteException") ||
                             msg.contains("ClosedChannelException") ||
                             msg.contains("Broken pipe") ||
-                            msg.contains("JobCancellationException")) {
+                            msg.contains("JobCancellationException")
+                        ) {
                             // Client disconnected, normal behavior
                         } else {
-                            Timber.e(e, "Error streaming Netease song $songId")
+                            Timber.e(e, "Error streaming GDrive file $fileId")
                         }
                     }
                 }
             }
-        }
-    }
-
-    private suspend fun getOrFetchStreamUrl(songId: Long): String? {
-        // Check cache first
-        urlCache[songId]?.let { cached ->
-            if (!cached.isExpired()) return cached.url
-        }
-
-        // Fetch fresh URL
-        val result = repository.getSongUrl(songId)
-        return result.getOrNull()?.also { url ->
-            urlCache[songId] = CachedUrl(url, System.currentTimeMillis())
         }
     }
 }
