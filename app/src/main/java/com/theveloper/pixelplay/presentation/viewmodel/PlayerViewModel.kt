@@ -815,28 +815,47 @@ class PlayerViewModel @Inject constructor(
      * Called from Quick Settings tile. Unlike shuffleAllSongs(), this always starts
      * fresh playback regardless of current state, and correctly handles the case
      * where the MediaController isn't ready yet (cold start from tile).
+     *
+     * Uses allSongsFlow (StateFlow populated after resetAndLoadInitialData) instead
+     * of querying the DB directly, which can be empty on cold start before sync runs.
      */
     fun triggerShuffleAllFromTile() {
+        Timber.d("[TileDebug] triggerShuffleAllFromTile called. mediaController=${mediaController != null}")
         val action: () -> Unit = {
+            Timber.d("[TileDebug] action() invoked")
             viewModelScope.launch {
-                // Retry a few times in case the DB (Room) hasn't finished any pending writes
-                var songs = musicRepository.getRandomSongs(limit = 500)
-                var attempts = 0
-                while (songs.isEmpty() && attempts < 10) {
-                    kotlinx.coroutines.delay(300)
-                    songs = musicRepository.getRandomSongs(limit = 500)
-                    attempts++
+                // If the in-memory library is already loaded, use it immediately
+                var songs = allSongsFlow.value
+                Timber.d("[TileDebug] allSongsFlow has ${songs.size} songs immediately")
+
+                if (songs.isEmpty()) {
+                    // Library not loaded yet — trigger a sync and wait up to 30s
+                    Timber.d("[TileDebug] Library empty, triggering sync and waiting for allSongsFlow")
+                    syncManager.sync()
+                    val result = withTimeoutOrNull(30_000L) {
+                        allSongsFlow.first { it.isNotEmpty() }
+                    }
+                    songs = result ?: persistentListOf()
+                    Timber.d("[TileDebug] After wait, allSongsFlow has ${songs.size} songs")
                 }
+
                 if (songs.isNotEmpty()) {
-                    playSongsShuffled(songs, "All Songs (Shuffled)")
+                    // Shuffle a random subset (up to 500) to avoid loading entire library
+                    val subset = if (songs.size > 500) songs.shuffled().take(500) else songs.toList()
+                    Timber.d("[TileDebug] Calling playSongsShuffled with ${subset.size} songs")
+                    playSongsShuffled(subset, "All Songs (Shuffled)")
+                } else {
+                    Timber.w("[TileDebug] No songs found even after sync - library may be empty")
+                    sendToast("No songs found in library")
                 }
             }
         }
 
         if (mediaController == null) {
-            // MediaController not ready yet (cold start). Queue the action.
+            Timber.d("[TileDebug] mediaController null, queuing as pendingPlaybackAction")
             pendingPlaybackAction = action
         } else {
+            Timber.d("[TileDebug] mediaController ready, calling action immediately")
             action()
         }
     }
