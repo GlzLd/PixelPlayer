@@ -31,6 +31,26 @@ data class QueueItem(
 }
 
 @Serializable
+data class WidgetThemeColors(
+    val lightPrimary: Int,
+    val lightOnPrimary: Int,
+    val lightPrimaryContainer: Int,
+    val lightOnPrimaryContainer: Int,
+    val lightSecondaryContainer: Int, // secondaryContainer
+    val lightOnSecondaryContainer: Int,
+    val lightSurface: Int,
+    val lightOnSurface: Int,
+    val darkPrimary: Int,
+    val darkOnPrimary: Int,
+    val darkPrimaryContainer: Int,
+    val darkOnPrimaryContainer: Int,
+    val darkSecondaryContainer: Int,
+    val darkOnSecondaryContainer: Int,
+    val darkSurface: Int,
+    val darkOnSurface: Int
+)
+
+@Serializable
 data class PlayerInfo(
     val songTitle: String = "",
     val artistName: String = "",
@@ -42,7 +62,10 @@ data class PlayerInfo(
     val isFavorite: Boolean = false,
     val lyrics: Lyrics? = null,
     val isLoadingLyrics: Boolean = false,
-    val queue: List<QueueItem> = emptyList()
+    val queue: List<QueueItem> = emptyList(),
+    val themeColors: WidgetThemeColors? = null,
+    val isShuffleEnabled: Boolean = false,
+    val repeatMode: Int = 0, // 0 = OFF, 1 = ONE, 2 = ALL
 ) {
     // equals y hashCode para ByteArray, ya que el por defecto no es comparando contenido
     override fun equals(other: Any?): Boolean {
@@ -64,6 +87,9 @@ data class PlayerInfo(
         if (queue != other.queue) return false
         if (lyrics != other.lyrics) return false
         if (isLoadingLyrics != other.isLoadingLyrics) return false
+        if (themeColors != other.themeColors) return false
+        if (isShuffleEnabled != other.isShuffleEnabled) return false
+        if (repeatMode != other.repeatMode) return false
 
         return true
     }
@@ -79,6 +105,9 @@ data class PlayerInfo(
         result = 31 * result + queue.hashCode()
         result = 31 * result + (lyrics?.hashCode() ?: 0)
         result = 31 * result + isLoadingLyrics.hashCode()
+        result = 31 * result + (themeColors?.hashCode() ?: 0)
+        result = 31 * result + isShuffleEnabled.hashCode()
+        result = 31 * result + repeatMode
         return result
     }
 }
