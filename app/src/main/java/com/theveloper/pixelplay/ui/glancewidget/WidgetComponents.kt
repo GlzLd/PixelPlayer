@@ -137,7 +137,8 @@ fun PreviousButton(
     modifier: GlanceModifier,
     backgroundColor: ColorProvider,
     iconColor: ColorProvider,
-    cornerRadius: Dp
+    cornerRadius: Dp,
+    iconSize: Dp = 20.dp
 ) {
     val params = actionParametersOf(PlayerActions.key to PlayerActions.PREVIOUS)
     WidgetIconButton(
@@ -147,6 +148,7 @@ fun PreviousButton(
         iconColor = iconColor,
         imageProvider = ImageProvider(R.drawable.rounded_skip_previous_24),
         contentDescription = "Previous",
+        iconSize = iconSize,
         cornerRadius = cornerRadius
     )
 }
@@ -156,7 +158,8 @@ fun NextButton(
     modifier: GlanceModifier,
     backgroundColor: ColorProvider,
     iconColor: ColorProvider,
-    cornerRadius: Dp
+    cornerRadius: Dp,
+    iconSize: Dp = 20.dp
 ) {
     val params = actionParametersOf(PlayerActions.key to PlayerActions.NEXT)
     WidgetIconButton(
@@ -166,6 +169,7 @@ fun NextButton(
         iconColor = iconColor,
         imageProvider = ImageProvider(R.drawable.rounded_skip_next_24),
         contentDescription = "Next",
+        iconSize = iconSize,
         cornerRadius = cornerRadius
     )
 }
@@ -176,7 +180,8 @@ fun PlayPauseButton(
     isPlaying: Boolean,
     backgroundColor: ColorProvider,
     iconColor: ColorProvider,
-    cornerRadius: Dp
+    cornerRadius: Dp,
+    iconSize: Dp = 22.dp
 ) {
     val params = actionParametersOf(PlayerActions.key to PlayerActions.PLAY_PAUSE)
     WidgetIconButton(
@@ -189,7 +194,7 @@ fun PlayPauseButton(
             else R.drawable.rounded_play_arrow_24
         ),
         contentDescription = if (isPlaying) "Pause" else "Play",
-        iconSize = 22.dp, // Play/Pause is slightly larger in original code
+        iconSize = iconSize,
         cornerRadius = cornerRadius
     )
 }

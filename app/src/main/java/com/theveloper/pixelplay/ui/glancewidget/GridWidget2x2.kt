@@ -60,6 +60,10 @@ class GridWidget2x2 : GlanceAppWidget() {
 
         val size = LocalSize.current
         val minSide = min(size.width, size.height)
+        
+        val dynamicIconSize = (minSide.value * 0.14f).dp
+        val dynamicPlayIconSize = (minSide.value * 0.16f).dp
+        val albumArtSize = (minSide.value * 0.40f).dp
 
         Box(
             modifier = GlanceModifier
@@ -88,7 +92,7 @@ class GridWidget2x2 : GlanceAppWidget() {
                                 .defaultWeight()
                                 .fillMaxHeight(),
                             bitmapData = albumArtBitmapData,
-                            size = 44.dp, // Used for optimization and placeholder size
+                            size = albumArtSize, // Used for optimization and placeholder size
                             context = context,
                             cornerRadius = itemCornerRadius
                         )
@@ -103,7 +107,8 @@ class GridWidget2x2 : GlanceAppWidget() {
                             isPlaying = isPlaying,
                             backgroundColor = colors.playPauseBackground,
                             iconColor = colors.playPauseIcon,
-                            cornerRadius = itemCornerRadius
+                            cornerRadius = itemCornerRadius,
+                            iconSize = dynamicPlayIconSize
                         )
                     }
 
@@ -122,7 +127,8 @@ class GridWidget2x2 : GlanceAppWidget() {
                                 .fillMaxHeight(),
                             backgroundColor = colors.prevNextBackground,
                             iconColor = colors.prevNextIcon,
-                            cornerRadius = itemCornerRadius
+                            cornerRadius = itemCornerRadius,
+                            iconSize = dynamicIconSize
                         )
 
                         Spacer(GlanceModifier.width(6.dp))
@@ -134,7 +140,8 @@ class GridWidget2x2 : GlanceAppWidget() {
                                 .fillMaxHeight(),
                             backgroundColor = colors.prevNextBackground,
                             iconColor = colors.prevNextIcon,
-                            cornerRadius = itemCornerRadius
+                            cornerRadius = itemCornerRadius,
+                            iconSize = dynamicIconSize
                         )
                     }
                 }
