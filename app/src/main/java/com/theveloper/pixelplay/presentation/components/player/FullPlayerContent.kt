@@ -64,7 +64,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -184,19 +184,19 @@ fun FullPlayerContent(
     var showLyricsSheet by remember { mutableStateOf(false) }
     var showArtistPicker by rememberSaveable { mutableStateOf(false) }
     
-    val lyricsSearchUiState by playerViewModel.lyricsSearchUiState.collectAsState()
-    val currentSongArtists by playerViewModel.currentSongArtists.collectAsState()
-    val lyricsSyncOffset by playerViewModel.currentSongLyricsSyncOffset.collectAsState()
-    val albumArtQuality by playerViewModel.albumArtQuality.collectAsState()
-    val playbackAudioMetadata by playerViewModel.playbackAudioMetadata.collectAsState()
-    val showPlayerFileInfo by playerViewModel.showPlayerFileInfo.collectAsState()
-    val immersiveLyricsEnabled by playerViewModel.immersiveLyricsEnabled.collectAsState()
-    val immersiveLyricsTimeout by playerViewModel.immersiveLyricsTimeout.collectAsState()
-    val isImmersiveTemporarilyDisabled by playerViewModel.isImmersiveTemporarilyDisabled.collectAsState()
-    val isRemotePlaybackActive by playerViewModel.isRemotePlaybackActive.collectAsState()
-    val selectedRouteName by playerViewModel.selectedRoute.map { it?.name }.collectAsState(initial = null)
-    val isBluetoothEnabled by playerViewModel.isBluetoothEnabled.collectAsState()
-    val bluetoothName by playerViewModel.bluetoothName.collectAsState()
+    val lyricsSearchUiState by playerViewModel.lyricsSearchUiState.collectAsStateWithLifecycle()
+    val currentSongArtists by playerViewModel.currentSongArtists.collectAsStateWithLifecycle()
+    val lyricsSyncOffset by playerViewModel.currentSongLyricsSyncOffset.collectAsStateWithLifecycle()
+    val albumArtQuality by playerViewModel.albumArtQuality.collectAsStateWithLifecycle()
+    val playbackAudioMetadata by playerViewModel.playbackAudioMetadata.collectAsStateWithLifecycle()
+    val showPlayerFileInfo by playerViewModel.showPlayerFileInfo.collectAsStateWithLifecycle()
+    val immersiveLyricsEnabled by playerViewModel.immersiveLyricsEnabled.collectAsStateWithLifecycle()
+    val immersiveLyricsTimeout by playerViewModel.immersiveLyricsTimeout.collectAsStateWithLifecycle()
+    val isImmersiveTemporarilyDisabled by playerViewModel.isImmersiveTemporarilyDisabled.collectAsStateWithLifecycle()
+    val isRemotePlaybackActive by playerViewModel.isRemotePlaybackActive.collectAsStateWithLifecycle()
+    val selectedRouteName by playerViewModel.selectedRoute.map { it?.name }.collectAsStateWithLifecycle(initialValue = null)
+    val isBluetoothEnabled by playerViewModel.isBluetoothEnabled.collectAsStateWithLifecycle()
+    val bluetoothName by playerViewModel.bluetoothName.collectAsStateWithLifecycle()
 
     var showFetchLyricsDialog by remember { mutableStateOf(false) }
     var totalDrag by remember { mutableStateOf(0f) }
@@ -1038,7 +1038,7 @@ private fun SongMetadataDisplaySection(
             )
         }
         
-        val stablePlayerState by playerViewModel.stablePlayerState.collectAsState()
+        val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
         val isBuffering = stablePlayerState.isBuffering
 
 
