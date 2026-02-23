@@ -817,122 +817,14 @@ fun LibraryScreen(
                             if (inSelectionMode) {
                                 // Playlist selection row
                                 if (currentTabId == LibraryTabId.PLAYLISTS && isPlaylistSelectionMode) {
-                                    // Playlist selection row
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 4.dp),
-                                        horizontalArrangement = Arrangement.Absolute.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        // Left side: Select All + Deselect
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            FilledTonalButton(
-                                                onClick = {
-                                                    playerViewModel.playlistSelectionStateHolder.selectAll(playlistUiState.playlists)
-                                                },
-                                                shape = AbsoluteSmoothCornerShape(
-                                                    cornerRadiusTL = 12.dp,
-                                                    cornerRadiusBL = 12.dp,
-                                                    cornerRadiusTR = 8.dp,
-                                                    cornerRadiusBR = 8.dp,
-                                                    smoothnessAsPercentTL = 60,
-                                                    smoothnessAsPercentBL = 60,
-                                                    smoothnessAsPercentTR = 60,
-                                                    smoothnessAsPercentBR = 60
-                                                ),
-                                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                                ),
-                                                contentPadding = PaddingValues(horizontal = 14.dp),
-                                                modifier = Modifier.height(40.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.SelectAll,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "All",
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontFamily = GoogleSansRounded
-                                                )
-                                            }
-
-                                            FilledTonalButton(
-                                                onClick = { playerViewModel.playlistSelectionStateHolder.clearSelection() },
-                                                shape = AbsoluteSmoothCornerShape(
-                                                    cornerRadiusTL = 8.dp,
-                                                    cornerRadiusBL = 8.dp,
-                                                    cornerRadiusTR = 12.dp,
-                                                    cornerRadiusBR = 12.dp,
-                                                    smoothnessAsPercentTL = 60,
-                                                    smoothnessAsPercentBL = 60,
-                                                    smoothnessAsPercentTR = 60,
-                                                    smoothnessAsPercentBR = 60
-                                                ),
-                                                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                                                    containerColor = MaterialTheme.colorScheme.secondary,
-                                                    contentColor = MaterialTheme.colorScheme.onSecondary
-                                                ),
-                                                contentPadding = PaddingValues(horizontal = 14.dp),
-                                                modifier = Modifier.height(40.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Rounded.Deselect,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = "Deselect",
-                                                    style = MaterialTheme.typography.labelLarge,
-                                                    fontWeight = FontWeight.Medium,
-                                                    fontFamily = GoogleSansRounded
-                                                )
-                                            }
-                                        }
-
-                                        // Right side: Options button
-                                        FilledTonalButton(
-                                            onClick = { showPlaylistMultiSelectionSheet = true },
-                                            shape = AbsoluteSmoothCornerShape(
-                                                cornerRadiusTL = 12.dp,
-                                                cornerRadiusBL = 12.dp,
-                                                cornerRadiusTR = 12.dp,
-                                                cornerRadiusBR = 12.dp,
-                                                smoothnessAsPercentTL = 60,
-                                                smoothnessAsPercentBL = 60,
-                                                smoothnessAsPercentTR = 60,
-                                                smoothnessAsPercentBR = 60
-                                            ),
-                                            colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            modifier = Modifier.height(40.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Rounded.MoreHoriz,
-                                                contentDescription = "More options",
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Options",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Medium,
-                                                fontFamily = GoogleSansRounded
-                                            )
-                                        }
-                                    }
+                                    SelectionActionRow(
+                                        selectedCount = selectedPlaylists.size,
+                                        onSelectAll = {
+                                            playerViewModel.playlistSelectionStateHolder.selectAll(playlistUiState.playlists)
+                                        },
+                                        onDeselect = { playerViewModel.playlistSelectionStateHolder.clearSelection() },
+                                        onOptionsClick = { showPlaylistMultiSelectionSheet = true }
+                                    )
                                 } else if (currentTabId == LibraryTabId.ALBUMS && isAlbumSelectionMode) {
                                     SelectionActionRow(
                                         selectedCount = selectedAlbums.size,
@@ -1648,7 +1540,6 @@ fun LibraryScreen(
             selectedPlaylists = selectedPlaylists,
             onDismiss = {
                 showPlaylistMultiSelectionSheet = false
-                playlistMultiSelectionState.clearSelection()
             },
             onDeleteAll = {
                 playlistViewModel.deletePlaylistsInBatch(selectedPlaylistIds.toList())
